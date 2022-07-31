@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "efs-playground"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-13v3pefdyn46p"
+s3_prefix = "efs-playground"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "VpcId=\"vpc-2708bf40\" SubnetID=\"subnet-4700526d\" SecurityGroupIDs=\"sg-90433feb\""
+image_repositories = []
+disable_rollback = true

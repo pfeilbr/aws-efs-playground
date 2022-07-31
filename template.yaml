@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Create EFS and lambda resources
+
+Parameters:
+
+  VpcId:
+    Type: String
+    Default: vpc-2708bf40
+
+  SubnetID:
+    Description: The subnet id
+    Type: AWS::EC2::Subnet::Id   
+    Default: subnet-4700526d
+
+  SecurityGroupIDs:
+    Description: The array of security group ids
+    Type: List<AWS::EC2::SecurityGroup::Id>    
+    Default: sg-90433feb    
+
+Resources:
+ 
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      PerformanceMode: generalPurpose
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: TestFileSystem
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "elasticfilesystem:*"
+            Principal:
+              AWS: "*"
+
+  MountTargetResource:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref SubnetID
+      SecurityGroups: !Ref SecurityGroupIDs
+   
+  AccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0777"
+        Path: "/myefs"
+
+  LambdaAccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0777"
+        Path: "/myefs-lambda"
+
+  MyFunctionWithEfs:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: efs_lambda_function.lambda_handler
+      Runtime: python3.9
+      CodeUri: .
+      VpcConfig:
+        SecurityGroupIds: !Ref SecurityGroupIDs
+        SubnetIds:
+        - Ref: SubnetID
+      FileSystemConfigs:
+      - Arn: !GetAtt LambdaAccessPointResource.Arn
+        LocalMountPath: "/mnt/efs"
+      Description: Use a file system.
+      Policies:
+      - Statement:
+        - Sid: AWSLambdaVPCAccessExecutionRole
+          Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+          Resource: "*"
+        - Sid: AmazonElasticFileSystemClientFullAccess
+          Effect: Allow
+          Action:
+            - elasticfilesystem:ClientMount
+            - elasticfilesystem:ClientRootAccess
+            - elasticfilesystem:ClientWrite
+            - elasticfilesystem:DescribeMountTargets
+          Resource: "*"      
+      Events:
+        Get:
+          Type: 'Api'
+          Properties:
+            Path: '/'
+            Method: 'get'
+    DependsOn:
+      - MountTargetResource    
+      # - FileSystemResource
+      # - AccessPointResource
+      # - LambdaAccessPointResource
+
+Outputs:
+  FileSystemId:
+    Value: !GetAtt FileSystemResource.FileSystemId
+  FileSystemArn:
+    Value: !GetAtt FileSystemResource.Arn
+  MountTargetId:
+    Value: !GetAtt MountTargetResource.Id
+  MountTargetIpAddress:
+    Value: !GetAtt MountTargetResource.IpAddress
+  MountTargetDns:
+    Value: !Sub "${FileSystemResource.FileSystemId}.efs.${AWS::Region}.amazonaws.com"
+  AccessPointId:
+    Value: !GetAtt AccessPointResource.AccessPointId
+  AccessPointArn:
+    Value: !GetAtt AccessPointResource.Arn 
+  MyFunctionWithEfsApi:
+    Description: "API Gateway endpoint URL for Prod stage for MyFunctionWithEfs function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"       
